@@ -1,68 +1,62 @@
-var mongoose = require('mongoose');
-var bcrypt = require('bcryptjs');
-var Schema = mongoose.Schema;
+const mongoose = require('mongoose');
+const { isEmail } = require('validator');
+const bcrypt = require('bcrypt');
 
-var UserSchema = mongoose.Schema({
-  username: {
-    type: String
-  },
+const userSchema = new mongoose.Schema({
   email: {
-    type: String
+    type: String,
+    required: [true, 'Please enter an email'],
+    unique: true,
+    lowercase: true,
+    validate: [isEmail, 'Please enter a valid email']
+  },
+  firstname: {
+    type: String,
+    required: [true, 'Please enter the first name...'],
+    lowercase: true,
+  },
+  secondname: {
+    type: String,
+    required: [true, 'Please enter the second name...'],
+    lowercase: true,
+  },
+  contactno: {
+    type: Number,
+    required: [true, 'Please enter the Contact Number...'],
+    lowercase: true,
+  },
+  image: {
+    type: String,
+    required: [true, 'Please Upload the file...'],
   },
   password: {
     type: String,
-    bcrypt: true
-  },
-  type: {  // If it is an instructor or a student
-    type: String
+    required: [true, 'Please enter a password'],
+    minlength: [6, 'Minimum password length is 6 characters'],
   }
 });
 
-var User = module.exports = mongoose.model('User', UserSchema);
 
-// Get a single user by id
-module.exports.getUserById = function(id, callback) {
-  User.findById(id, callback);
+// fire a function before doc saved to db
+userSchema.pre('save', async function(next) {
+  const salt = await bcrypt.genSalt();
+  this.password = await bcrypt.hash(this.password, salt);
+  next();
+});
+
+// static method to login user
+userSchema.statics.login = async function(email, password) {
+  const user = await this.findOne({ email });
+  if (user) {
+    const auth = await bcrypt.compare(password, user.password);
+    if (auth) {
+      return user;
+    }
+    throw Error('incorrect password');
+  }
+  throw Error('incorrect email');
 };
 
-// Get user by username
-module.exports.getUserByUsername = function(username, callback) {
-  var query = {username: username};
-  User.findOne(query, callback);
-};
+const User = mongoose.model('user', userSchema);
 
-// Compare passwords
-module.exports.comparePassword = function(userPassword, hash, callback) {
-  bcrypt.compare(userPassword, hash, function(err, isMatch) {
-    if(err) {
-      throw err;
-    }
-    callback(null, isMatch);
-  });
-}
-
-// Create user type student and hash password with bcrypt
-module.exports.saveStudent = function(newUser, newStudent, callback) {
-  bcrypt.hash(newUser.password, 10, function(err, hash) {
-    if(err) {
-      throw err;
-    }
-    // Hash password
-    newUser.password = hash;
-    // Save user in two different collections
-    async.parallel([newUser.save.bind(newUser), newStudent.save.bind(newStudent)], callback);
-  });
-}
-
-// Create user type instructor and hash password with bcrypt
-module.exports.saveInstructor = function(newUser, newInstructor, callback) {
-  bcrypt.hash(newUser.password, 10, function(err, hash) {
-    if(err) {
-      throw err;
-    }
-    // Hash password
-    newUser.password = hash;
-    // Save instructor in two different collections
-    async.parallel([newUser.save.bind(newUser), newInstructor.save.bind(newInstructor)], callback);
-  });
-}
+module.exports = User;
